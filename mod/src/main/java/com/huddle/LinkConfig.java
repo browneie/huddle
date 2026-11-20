@@ -34,12 +34,21 @@ public class LinkConfig extends Config {
     @Switch(title = "Background", subcategory = "Voice Overlay")
     public static boolean overlayBackground = true;
 
+    @Switch(title = "Check for Updates", description = "Look for a new Huddle release on GitHub when the game starts.",
+            subcategory = "Updates")
+    public static boolean checkForUpdates = true;
+
+    @Switch(title = "Install Updates Automatically", description = "Download new releases without asking. They load the next time you start the game. Only jars whose checksum matches the one GitHub lists are installed.",
+            subcategory = "Updates")
+    public static boolean autoInstallUpdates = false;
+
     private LinkConfig() {
         super("huddle.json", "Huddle", Category.QOL);
         for (String option : new String[]{"notifications", "sound", "notificationSeconds", "voiceOverlay",
                 "overlayBackground"}) {
             addDependency(option, "enabled");
         }
+        addDependency("autoInstallUpdates", "checkForUpdates");
         addDependency("sound", "notifications");
         addDependency("notificationSeconds", "notifications");
         for (String option : new String[]{"overlayBackground"}) {

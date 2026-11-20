@@ -15,6 +15,13 @@ Your Discord notifications and voice call, inside Minecraft 1.8.9 (Ornithe / One
 >   computer could take port 25599 first and receive the DMs and mentions the plugin sends, including
 >   their text. If you share your computer or don't trust everything on it, turn off **Include the message
 >   text** in the plugin settings, or turn the plugin off when you're not playing.
+> - **The mod can download and install updates.** It only takes releases from
+>   [browneie/huddle](https://github.com/browneie/huddle), and only installs a jar whose SHA-256 matches the
+>   checksum GitHub lists for it. That catches broken or swapped downloads, but if this GitHub account were
+>   ever taken over, a bad release would pass the check too. By default it asks before installing; leave
+>   **Install Updates Automatically** off if you want to look at each release first, or turn off **Check
+>   for Updates** to stop it contacting GitHub at all. The plugin only checks and tells you; it never
+>   changes its own files.
 > - **DMs show up on screen.** If you stream or record Minecraft, people can read your notifications.
 >   Turn off notifications in the mod, or set Do Not Disturb in Discord, while you're live.
 >
@@ -71,6 +78,20 @@ cd mod && ./gradlew build
 ```
 
 The jar is written to `mod/build/libs/`.
+
+## Updates
+
+- **The mod** checks GitHub when the game starts. When there's a newer release you get a notification
+  with **Update**, which downloads the new jar, checks it, and swaps it in for your next launch. Turn on
+  **Install Updates Automatically** in OneConfig → Huddle → Updates to skip the button. If Huddle was loaded
+  from somewhere other than your mods folder, you get a **View** button that opens the release instead.
+- **The plugin** checks GitHub when Discord starts and every 6 hours, and shows a Discord notification
+  linking to the new release. To update it, replace `Equicord/src/userplugins/huddle` with the new folder
+  and run `pnpm build`.
+- **Mismatched versions:** when the game connects, the mod and the plugin compare versions. If one is
+  older, both Discord and the game tell you which one to update.
+
+Updating from 1.0.0 is manual, since 1.0.0 has no updater.
 
 ## Testing
 

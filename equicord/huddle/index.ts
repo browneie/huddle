@@ -3,6 +3,7 @@
  * Huddle Ornithe mod, which shows them in game.
  */
 
+import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { findStoreLazy } from "@webpack";
@@ -19,6 +20,10 @@ import {
 
 const Native = VencordNative.pluginHelpers.Huddle as PluginNative<typeof import("./native")>;
 
+/** Keep in step with the mod's version; they warn each other when they don't match. */
+const PLUGIN_VERSION = "1.1.0";
+const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
+
 const VoiceStateStore = findStoreLazy("VoiceStateStore");
 const SpeakingStore = findStoreLazy("SpeakingStore");
 const MediaEngineStore = findStoreLazy("MediaEngineStore");
@@ -29,7 +34,7 @@ const settings = definePluginSettings({
         type: OptionType.NUMBER,
         description: "Port the Minecraft mod listens on (must match the mod's config)",
         default: 25599,
-        onChange: (port: number) => Native.start(port),
+        onChange: (port: number) => Native.start(port, PLUGIN_VERSION),
     },
     notifyOnline: {
         type: OptionType.BOOLEAN,
@@ -77,7 +82,62 @@ const settings = definePluginSettings({
         default: true,
         onChange: () => queueVoice(),
     },
+    checkForUpdates: {
+        type: OptionType.BOOLEAN,
+        description: "Tell me when a new Huddle release is on GitHub (the plugin never updates itself)",
+        default: true,
+    },
 });
+
+// ---------- versions ----------
+
+/** Compares dotted versions numerically; anything after '-' or '+' is ignored. */
+function compareVersions(a: string, b: string): number {
+    const x = a.split(/[-+]/)[0].split(".").map(n => parseInt(n, 10) || 0);
+    const y = b.split(/[-+]/)[0].split(".").map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+        const d = (x[i] ?? 0) - (y[i] ?? 0);
+        if (d) return Math.sign(d);
+    }
+    return 0;
+}
+
+let updateTimer: ReturnType<typeof setInterval> | null = null;
+let modCheckTimer: ReturnType<typeof setInterval> | null = null;
+let notifiedRelease: string | null = null;
+let checkedModVersion: string | null = null;
+
+async function checkForUpdate() {
+    if (!settings.store.checkForUpdates) return;
+    const release = await Native.latestRelease();
+    if (!release || compareVersions(release.version, PLUGIN_VERSION) <= 0 || notifiedRelease === release.version) return;
+    notifiedRelease = release.version;
+    showNotification({
+        title: `Huddle ${release.version} is available`,
+        body: `You have plugin ${PLUGIN_VERSION}. Click to open the release, then replace the plugin folder and rebuild Equicord.`,
+        onClick: () => VencordNative.native.openExternal(release.url),
+        permanent: true,
+    });
+}
+
+/** Warns once per game connection when the mod and the plugin are different versions. */
+async function checkModVersion() {
+    const mod = await Native.getModVersion();
+    if (!mod) {
+        checkedModVersion = null;
+        return;
+    }
+    if (mod === checkedModVersion) return;
+    checkedModVersion = mod;
+    const cmp = compareVersions(mod, PLUGIN_VERSION);
+    if (cmp === 0) return;
+    showNotification({
+        title: cmp > 0 ? "Update the Huddle plugin" : "Update the Huddle mod",
+        body: cmp > 0
+            ? `The game has mod ${mod} but this plugin is ${PLUGIN_VERSION}. Some things may not work until they match.`
+            : `This plugin is ${PLUGIN_VERSION} but the game has mod ${mod}. Some things may not work until they match.`,
+    });
+}
 
 // ---------- helpers ----------
 
@@ -258,7 +318,10 @@ export default definePlugin({
     },
 
     start() {
-        Native.start(settings.store.port);
+        Native.start(settings.store.port, PLUGIN_VERSION);
+        checkForUpdate();
+        updateTimer = setInterval(checkForUpdate, UPDATE_CHECK_MS);
+        modCheckTimer = setInterval(checkModVersion, 5000);
         for (const store of voiceStores()) store.addChangeListener(queueVoice);
         lastVoiceJson = "";
         queueVoice();
@@ -268,6 +331,10 @@ export default definePlugin({
         for (const store of voiceStores()) store.removeChangeListener(queueVoice);
         if (voiceTimer) clearTimeout(voiceTimer);
         voiceTimer = null;
+        if (updateTimer) clearInterval(updateTimer);
+        if (modCheckTimer) clearInterval(modCheckTimer);
+        updateTimer = modCheckTimer = null;
+        checkedModVersion = null;
         // the mod clears the overlay when the connection drops
         Native.stop();
     },

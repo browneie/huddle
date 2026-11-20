@@ -7,6 +7,7 @@ import com.google.gson.JsonParser;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -53,6 +54,15 @@ public final class LinkServer {
         LinkState.clientConnected();
         try (Socket socket = client;
              BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
+            // tell the plugin which mod version it's talking to, so it can warn about a mismatch
+            JsonObject hello = new JsonObject();
+            hello.addProperty("type", "hello");
+            hello.addProperty("version", 1);
+            hello.addProperty("mod", Updater.version());
+            OutputStream out = socket.getOutputStream();
+            out.write((hello.toString() + "\n").getBytes(StandardCharsets.UTF_8));
+            out.flush();
+
             String line;
             while ((line = in.readLine()) != null) {
                 if (line.length() > MAX_LINE) break;
@@ -79,8 +89,29 @@ public final class LinkServer {
             case "voice":
                 LinkState.setVoice(parseVoice(msg));
                 break;
+            case "hello":
+                checkPluginVersion(msg);
+                break;
             default:
-                break; // "hello" and anything newer than us
+                break; // anything newer than us
+        }
+    }
+
+    private static volatile boolean warnedMismatch;
+
+    /** Plugins before 1.1.0 don't say their version, so a missing one counts as 1.0.0. */
+    private static void checkPluginVersion(JsonObject hello) {
+        String plugin = hello.has("plugin") ? str(hello, "plugin") : "1.0.0";
+        String mod = Updater.version();
+        int cmp = Updater.compare(plugin, mod);
+        if (cmp == 0 || warnedMismatch) return;
+        warnedMismatch = true;
+        if (cmp < 0) {
+            Overlay.notifyLater("Update the Huddle plugin",
+                    "Discord has plugin " + plugin + " but the mod is " + mod + ". Some things may not work until they match.");
+        } else {
+            Overlay.notifyLater("Update the Huddle mod",
+                    "The mod is " + mod + " but Discord has plugin " + plugin + ". Some things may not work until they match.");
         }
     }
 
