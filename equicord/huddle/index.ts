@@ -1,0 +1,274 @@
+/*
+ * Huddle: forwards Discord notifications and your current voice call to the
+ * Huddle Ornithe mod, which shows them in game.
+ */
+
+import { definePluginSettings } from "@api/Settings";
+import definePlugin, { OptionType, PluginNative } from "@utils/types";
+import { findStoreLazy } from "@webpack";
+import {
+    ChannelStore,
+    GuildMemberStore,
+    GuildRoleStore,
+    GuildStore,
+    PresenceStore,
+    RelationshipStore,
+    SelectedChannelStore,
+    UserStore,
+} from "@webpack/common";
+
+const Native = VencordNative.pluginHelpers.Huddle as PluginNative<typeof import("./native")>;
+
+const VoiceStateStore = findStoreLazy("VoiceStateStore");
+const SpeakingStore = findStoreLazy("SpeakingStore");
+const MediaEngineStore = findStoreLazy("MediaEngineStore");
+const UserGuildSettingsStore = findStoreLazy("UserGuildSettingsStore");
+
+const settings = definePluginSettings({
+    port: {
+        type: OptionType.NUMBER,
+        description: "Port the Minecraft mod listens on (must match the mod's config)",
+        default: 25599,
+        onChange: (port: number) => Native.start(port),
+    },
+    notifyOnline: {
+        type: OptionType.BOOLEAN,
+        description: "Send notifications to Minecraft while Online",
+        default: true,
+    },
+    notifyIdle: {
+        type: OptionType.BOOLEAN,
+        description: "Send notifications to Minecraft while Idle",
+        default: true,
+    },
+    notifyInvisible: {
+        type: OptionType.BOOLEAN,
+        description: "Send notifications to Minecraft while Invisible",
+        default: true,
+    },
+    notifyDnd: {
+        type: OptionType.BOOLEAN,
+        description: "Send notifications to Minecraft while on Do Not Disturb",
+        default: false,
+    },
+    directMessages: {
+        type: OptionType.BOOLEAN,
+        description: "Notify for direct and group messages",
+        default: true,
+    },
+    mentions: {
+        type: OptionType.BOOLEAN,
+        description: "Notify when you (or a role you have) are mentioned in a server",
+        default: true,
+    },
+    everyone: {
+        type: OptionType.BOOLEAN,
+        description: "Also notify for @everyone and @here",
+        default: false,
+    },
+    showContent: {
+        type: OptionType.BOOLEAN,
+        description: "Include the message text (turn off to show only who messaged you)",
+        default: true,
+    },
+    voiceOverlay: {
+        type: OptionType.BOOLEAN,
+        description: "Send your voice channel to the in-game overlay",
+        default: true,
+        onChange: () => queueVoice(),
+    },
+});
+
+// ---------- helpers ----------
+
+function myStatus(): string {
+    const me = UserStore.getCurrentUser();
+    return (me && PresenceStore.getStatus(me.id)) || "online";
+}
+
+function statusAllowed(): boolean {
+    switch (myStatus()) {
+        case "idle": return settings.store.notifyIdle;
+        case "dnd": return settings.store.notifyDnd;
+        case "invisible":
+        case "offline": return settings.store.notifyInvisible;
+        default: return settings.store.notifyOnline;
+    }
+}
+
+function displayName(userId: string, guildId?: string | null, fallback?: any): string {
+    const nick = guildId ? GuildMemberStore.getNick(guildId, userId) : null;
+    if (nick) return nick;
+    const user: any = UserStore.getUser(userId) ?? fallback;
+    return user?.globalName ?? user?.global_name ?? user?.username ?? "Unknown";
+}
+
+/** Turns <@id>, <#id>, <@&id> and custom emoji into readable text. */
+function cleanContent(content: string, guildId?: string | null): string {
+    return content
+        .replace(/<@!?(\d+)>/g, (_, id) => "@" + displayName(id, guildId))
+        .replace(/<#(\d+)>/g, (_, id) => "#" + (ChannelStore.getChannel(id)?.name ?? "channel"))
+        .replace(/<@&(\d+)>/g, (_, id) => "@" + (guildId && GuildRoleStore.getRole(guildId, id)?.name || "role"))
+        .replace(/<a?(:\w+:)\d+>/g, "$1")
+        .replace(/<t:(\d+)(?::\w)?>/g, (_, t) => new Date(Number(t) * 1000).toLocaleString())
+        .trim();
+}
+
+function messageBody(message: any, guildId?: string | null): string {
+    const text = message.content ? cleanContent(message.content, guildId) : "";
+    if (text) return text;
+    if (message.attachments?.length) return `[${message.attachments.length} attachment${message.attachments.length > 1 ? "s" : ""}]`;
+    if (message.sticker_items?.length) return `[sticker: ${message.sticker_items[0].name}]`;
+    if (message.embeds?.length) return "[embed]";
+    return "";
+}
+
+function isChannelMuted(channel: any): boolean {
+    try {
+        const guildId = channel.guild_id ?? null;
+        if (guildId && UserGuildSettingsStore.isMuted(guildId)) return true;
+        return !!UserGuildSettingsStore.isChannelMuted(guildId, channel.id);
+    } catch {
+        return false;
+    }
+}
+
+function mentionsMe(message: any, guildId: string, meId: string): boolean {
+    if (message.mentions?.some((u: any) => (u.id ?? u) === meId)) return true;
+    if (message.mention_everyone) return settings.store.everyone;
+    if (message.mention_roles?.length) {
+        const roles: string[] = GuildMemberStore.getMember(guildId, meId)?.roles ?? [];
+        return message.mention_roles.some((r: string) => roles.includes(r));
+    }
+    return false;
+}
+
+function send(payload: object) {
+    Native.send(JSON.stringify(payload));
+}
+
+function sendNotification(title: string, subtitle: string, body: string) {
+    send({ type: "notification", title, subtitle, body });
+}
+
+// ---------- notifications ----------
+
+function onMessage(message: any, optimistic: boolean) {
+    if (optimistic || !message?.author) return;
+    const me = UserStore.getCurrentUser();
+    if (!me || message.author.id === me.id) return;
+    if (!statusAllowed()) return;
+    if (RelationshipStore.isBlocked(message.author.id)) return;
+
+    const channel = ChannelStore.getChannel(message.channel_id);
+    if (!channel || isChannelMuted(channel)) return;
+
+    const guildId: string | null = channel.guild_id ?? message.guild_id ?? null;
+    const isPrivate = !guildId;
+
+    if (isPrivate ? !settings.store.directMessages : !(settings.store.mentions && mentionsMe(message, guildId!, me.id))) return;
+
+    const author = message.member?.nick ?? displayName(message.author.id, guildId, message.author);
+    let subtitle: string;
+    if (isPrivate) {
+        subtitle = channel.type === 3
+            ? (channel.name || "Group DM")
+            : "Direct Message";
+    } else {
+        subtitle = `#${channel.name} · ${GuildStore.getGuild(guildId!)?.name ?? "Server"}`;
+    }
+    const body = settings.store.showContent ? messageBody(message, guildId) : "sent a message";
+    sendNotification(author, subtitle, body);
+}
+
+// ---------- voice overlay ----------
+
+let voiceTimer: ReturnType<typeof setTimeout> | null = null;
+let lastVoiceJson = "";
+
+function buildVoice(): object {
+    const channelId = SelectedChannelStore.getVoiceChannelId();
+    if (!settings.store.voiceOverlay || !channelId) return { type: "voice", channel: null, users: [] };
+
+    const channel = ChannelStore.getChannel(channelId);
+    const guildId: string | null = channel?.guild_id ?? null;
+    const meId: string | undefined = UserStore.getCurrentUser()?.id;
+    const states: Record<string, any> = VoiceStateStore.getVoiceStatesForChannel(channelId) ?? {};
+
+    const users = Object.values(states).map((s: any) => {
+        const self = s.userId === meId;
+        const selfMute = self ? !!MediaEngineStore.isSelfMute?.() : !!s.selfMute;
+        const selfDeaf = self ? !!MediaEngineStore.isSelfDeaf?.() : !!s.selfDeaf;
+        return {
+            id: s.userId,
+            name: displayName(s.userId, guildId),
+            self,
+            muted: selfMute,
+            deafened: selfDeaf,
+            serverMuted: !!s.mute || !!s.suppress,
+            serverDeafened: !!s.deaf,
+            speaking: !!SpeakingStore.isSpeaking(s.userId),
+            streaming: !!s.selfStream,
+        };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+
+    return {
+        type: "voice",
+        channel: channel?.name ?? "Voice",
+        guild: guildId ? GuildStore.getGuild(guildId)?.name ?? null : null,
+        users,
+    };
+}
+
+function flushVoice() {
+    voiceTimer = null;
+    const json = JSON.stringify(buildVoice());
+    if (json === lastVoiceJson) return;
+    lastVoiceJson = json;
+    Native.sendVoice(json);
+}
+
+/** Store changes (speaking especially) fire in bursts; coalesce them into one update. */
+function queueVoice() {
+    if (!voiceTimer) voiceTimer = setTimeout(flushVoice, 50);
+}
+
+const voiceStores = () => [VoiceStateStore, SpeakingStore, SelectedChannelStore, MediaEngineStore];
+
+export default definePlugin({
+    name: "Huddle",
+    description: "Shows your notifications and voice call inside Minecraft, through the Huddle mod.",
+    authors: [{ name: "brownie", id: 0n }],
+    settings,
+
+    flux: {
+        MESSAGE_CREATE({ message, optimistic }: { message: any; optimistic: boolean; }) {
+            try {
+                onMessage(message, optimistic);
+            } catch (e) {
+                console.error("[Huddle] notification failed", e);
+            }
+        },
+    },
+
+    toolboxActions: {
+        "Send Huddle Test Notification"() {
+            sendNotification("Huddle", "Test", "If you can read this in game, it works!");
+        },
+    },
+
+    start() {
+        Native.start(settings.store.port);
+        for (const store of voiceStores()) store.addChangeListener(queueVoice);
+        lastVoiceJson = "";
+        queueVoice();
+    },
+
+    stop() {
+        for (const store of voiceStores()) store.removeChangeListener(queueVoice);
+        if (voiceTimer) clearTimeout(voiceTimer);
+        voiceTimer = null;
+        // the mod clears the overlay when the connection drops
+        Native.stop();
+    },
+});

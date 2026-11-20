@@ -1,0 +1,25 @@
+{
+    "schemaVersion": 1,
+    "id": "${id}",
+    "version": "${version}",
+    "name": "${name}",
+    "description": "Shows Discord notifications and your voice call in game, fed by the Huddle Equicord plugin.",
+    "authors": [
+        "brownie"
+    ],
+    "license": "MIT",
+    "environment": "client",
+    "entrypoints": {
+        "client": [
+            "com.huddle.Huddle"
+        ]
+    },
+    "mixins": [
+        "huddle.mixins.json"
+    ],
+    "depends": {
+        "minecraft": "1.8.9",
+        "fabricloader": ">=0.17",
+        "oneconfigv1": ">=1.6.0"
+    }
+}
