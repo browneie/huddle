@@ -45,6 +45,52 @@ public final class LinkState {
         }
     }
 
+    /** One soundboard sound offered by Discord. */
+    public static final class Sound {
+        public final String id, guild, name, group;
+        public final boolean favorite;
+        /** The emoji as PNG bytes, or null. */
+        public final byte[] image;
+
+        public Sound(String id, String guild, String name, String group, boolean favorite, byte[] image) {
+            this.id = id;
+            this.guild = guild;
+            this.name = name;
+            this.group = group;
+            this.favorite = favorite;
+            this.image = image;
+        }
+    }
+
+    /** The plugin's answer to a soundboard request. */
+    public static final class Soundboard {
+        public final boolean available;
+        /** Why you can't use it (or why the list is empty); null otherwise. */
+        public final String reason;
+        public final List<Sound> sounds;
+
+        public Soundboard(boolean available, String reason, List<Sound> sounds) {
+            this.available = available;
+            this.reason = reason;
+            this.sounds = sounds;
+        }
+    }
+
+    private static volatile Soundboard soundboard;
+
+    static void setSoundboard(Soundboard s) {
+        soundboard = s;
+    }
+
+    /** The last list from Discord, or null if none has arrived since {@link #clearSoundboard()}. */
+    public static Soundboard soundboard() {
+        return soundboard;
+    }
+
+    public static void clearSoundboard() {
+        soundboard = null;
+    }
+
     private static final ConcurrentLinkedQueue<Notification> PENDING = new ConcurrentLinkedQueue<>();
     private static final AtomicInteger CLIENTS = new AtomicInteger();
     private static volatile Voice voice;

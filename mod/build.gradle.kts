@@ -1,6 +1,9 @@
 plugins {
-    id("net.fabricmc.fabric-loom-remap") version "1.17-SNAPSHOT"
-    id("ploceus") version "1.17.4"
+    id("net.fabricmc.fabric-loom-remap") version "1.19-SNAPSHOT"
+    id("ploceus") version "1.19.2"
+    // Compose UI like Poly+'s: Kotlin plus the Compose compiler, matching fabric-language-kotlin's Kotlin
+    kotlin("jvm") version "2.4.20"
+    kotlin("plugin.compose") version "2.4.20"
 }
 
 // OneClient runs 1.8.9 on Ornithe (calamus gen2 intermediary + Feather mappings), not Legacy Fabric.
@@ -61,6 +64,10 @@ dependencies {
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(25)
     withSourcesJar()
+}
+
+kotlin {
+    jvmToolchain(25)
 }
 
 tasks.withType<JavaCompile>().configureEach {

@@ -8,6 +8,7 @@ public class Huddle implements ClientModInitializer {
         Updater.removeLeftovers();
         LinkConfig.INSTANCE.preload();
         LinkServer.start(LinkConfig.port);
+        com.huddle.ui.HuddleUi.init();
         Updater.checkInBackground();
     }
 }

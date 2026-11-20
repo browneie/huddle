@@ -54,9 +54,13 @@ public final class Updater {
 
     /** This mod's version, as fabric.mod.json says. */
     public static String version() {
-        return FabricLoader.getInstance().getModContainer("huddle")
-                .map(c -> c.getMetadata().getVersion().getFriendlyString())
-                .orElse("0.0.0");
+        try {
+            return FabricLoader.getInstance().getModContainer("huddle")
+                    .map(c -> c.getMetadata().getVersion().getFriendlyString())
+                    .orElse("0.0.0");
+        } catch (Throwable t) {
+            return "0.0.0"; // never let this break the connection
+        }
     }
 
     /** Runs the check off the game thread; the result is shown as a notification by {@link Overlay}. */

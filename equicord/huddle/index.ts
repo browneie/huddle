@@ -18,10 +18,12 @@ import {
     UserStore,
 } from "@webpack/common";
 
+import { listSounds, playSound } from "./soundboard";
+
 const Native = VencordNative.pluginHelpers.Huddle as PluginNative<typeof import("./native")>;
 
 /** Keep in step with the mod's version; they warn each other when they don't match. */
-const PLUGIN_VERSION = "1.1.0";
+const PLUGIN_VERSION = "1.2.0";
 const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
 const VoiceStateStore = findStoreLazy("VoiceStateStore");
@@ -82,12 +84,56 @@ const settings = definePluginSettings({
         default: true,
         onChange: () => queueVoice(),
     },
+    soundboard: {
+        type: OptionType.BOOLEAN,
+        description: "Let the in-game wheel play soundboard sounds in your voice call. Off by default: while it's on, any program on this computer that can reach the game's port could play sounds as you.",
+        default: false,
+    },
     checkForUpdates: {
         type: OptionType.BOOLEAN,
         description: "Tell me when a new Huddle release is on GitHub (the plugin never updates itself)",
         default: true,
     },
 });
+
+// ---------- soundboard ----------
+
+let listening = false;
+/** Sounds last offered to the wheel; play requests for anything else are refused. */
+let offered = new Map<string, string | null>();
+
+async function handleCommand(cmd: any) {
+    if (!settings.store.soundboard) {
+        send({ type: "soundboard", available: false, reason: "Turn on Soundboard in the Huddle plugin settings in Discord.", sounds: [] });
+        return;
+    }
+    if (cmd.type === "soundboard_request") {
+        const list: any = await listSounds(url => Native.fetchImage(url));
+        offered = new Map(list.sounds.map((s: any) => [s.id, s.guild]));
+        send(list);
+    } else if (cmd.type === "play_sound" && typeof cmd.id === "string") {
+        if (!offered.has(cmd.id)) {
+            send({ type: "sound_result", id: cmd.id, ok: false, error: "That sound isn't available." });
+            return;
+        }
+        const error = await playSound(cmd.id, offered.get(cmd.id) ?? null);
+        send({ type: "sound_result", id: cmd.id, ok: !error, error });
+    }
+}
+
+/** Takes the game's requests one at a time for as long as the plugin runs. */
+async function commandLoop() {
+    while (listening) {
+        const cmd = await Native.nextCommand();
+        if (!listening) break;
+        if (!cmd) continue;
+        try {
+            await handleCommand(cmd);
+        } catch (e) {
+            console.error("[Huddle] soundboard request failed", e);
+        }
+    }
+}
 
 // ---------- versions ----------
 
@@ -322,6 +368,8 @@ export default definePlugin({
         checkForUpdate();
         updateTimer = setInterval(checkForUpdate, UPDATE_CHECK_MS);
         modCheckTimer = setInterval(checkModVersion, 5000);
+        listening = true;
+        commandLoop();
         for (const store of voiceStores()) store.addChangeListener(queueVoice);
         lastVoiceJson = "";
         queueVoice();
@@ -335,6 +383,8 @@ export default definePlugin({
         if (modCheckTimer) clearInterval(modCheckTimer);
         updateTimer = modCheckTimer = null;
         checkedModVersion = null;
+        listening = false;
+        offered.clear();
         // the mod clears the overlay when the connection drops
         Native.stop();
     },

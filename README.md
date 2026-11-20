@@ -15,6 +15,10 @@ Your Discord notifications and voice call, inside Minecraft 1.8.9 (Ornithe / One
 >   computer could take port 25599 first and receive the DMs and mentions the plugin sends, including
 >   their text. If you share your computer or don't trust everything on it, turn off **Include the message
 >   text** in the plugin settings, or turn the plugin off when you're not playing.
+> - **The soundboard lets the game play sounds in your call as you.** It's off until you turn on
+>   **Soundboard** in the plugin settings. While it's on, any program on your computer that can reach the
+>   port could play soundboard sounds in your voice call too, though only sounds the wheel was offered.
+>   Emoji pictures for the wheel are fetched from Discord's CDN and from Twemoji on cdn.jsdelivr.net.
 > - **The mod can download and install updates.** It only takes releases from
 >   [browneie/huddle](https://github.com/browneie/huddle), and only installs a jar whose SHA-256 matches the
 >   checksum GitHub lists for it. That catches broken or swapped downloads, but if this GitHub account were
@@ -35,7 +39,14 @@ Your Discord notifications and voice call, inside Minecraft 1.8.9 (Ornithe / One
   channels, muted servers and blocked users are skipped.
 - **A voice overlay** that lists everyone in your voice channel by server nickname or display name. Mic
   and headphone icons show who's muted or deafened, in red when the server did it. A green light shows
-  who's talking, and a **LIVE** tag shows who's streaming. Move and resize it in OneConfig's HUD editor.
+  who's talking, and a **LIVE** tag shows who's streaming. It's a OneConfig HUD called **Huddle Voice**:
+  move it, scale it and change its background in OneConfig's HUD editor.
+- **A soundboard wheel.** Hold **J** to open a wheel of your
+  soundboard sounds: favorites first, then this server's, Discord's defaults, and your other servers'
+  if you have Nitro. Point at one and let go to play it in your call, or tap J and click. Scroll for
+  more pages; Escape or the middle closes it. Turn on **Soundboard** in the plugin settings first.
+  Change the key, how dark the screen gets behind the wheel, and how solid the wheel is in
+  OneConfig → Huddle → Soundboard Wheel. The key is also in Minecraft's Controls, under Huddle.
 
 Huddle has two parts:
 
@@ -45,6 +56,23 @@ Huddle has two parts:
 
 The plugin connects to the game, not the other way round, and retries every 3 seconds, so you can start
 them in either order.
+
+## Requirements
+
+**Mod** (Minecraft 1.8.9, Ornithe):
+
+| Needs | Version | Where it comes from |
+| --- | --- | --- |
+| Fabric Loader | 0.17 or newer | OneClient, or any Ornithe 1.8.9 instance |
+| OneConfig | 1.8.0 or newer | OneClient (as `OneConfig-1.8.9-ornithe`) |
+| fabric-language-kotlin | 1.14.1 or newer | OneClient, or [Modrinth](https://modrinth.com/mod/fabric-language-kotlin) |
+| Compose bundle (`compose-multiplatform`) | any | OneClient (as `compose-bundle`), from Polyfrost |
+| Java | 25 | OneClient's 1.8.9 profile |
+
+A OneClient 1.8.9 profile already has all of these. Huddle 1.0.0 and 1.1.0 only needed OneConfig 1.6.0
+and Fabric Loader; from 1.2.0 on, the list above applies.
+
+**Plugin:** Equicord built from source, on the Discord desktop app (or Equibop).
 
 ## Install the plugin
 
@@ -64,11 +92,12 @@ can't do it.
 
 ## Install the mod
 
-Download `huddle-1.0.0.jar` from [Releases](../../releases), then drag it onto your 1.8.9 OneClient
-profile, or put it in the `mods` folder of a 1.8.9 Ornithe instance. OneConfig is required.
+Download the latest `huddle-<version>.jar` from [Releases](../../releases), then drag it onto your 1.8.9
+OneClient profile, or put it in the `mods` folder of a 1.8.9 Ornithe instance that has everything in
+[Requirements](#requirements).
 
 Settings are in OneConfig (Right Shift) → **Huddle**: turn notifications and their sound on or off, set
-how long notifications stay, and turn the overlay's background on or off. Place and size the overlay in
+how long notifications stay, and choose how updates work. Place, size and style the overlay in
 OneConfig's HUD editor, where it's listed as **Huddle Voice**.
 
 To build it yourself:
@@ -91,6 +120,13 @@ The jar is written to `mod/build/libs/`.
 - **Mismatched versions:** when the game connects, the mod and the plugin compare versions. If one is
   older, both Discord and the game tell you which one to update.
 
+The mod only checks at startup, and an update loads on the launch after you install it.
+
+The updater swaps the jar but doesn't install other mods. Before updating across a version that needs
+something new (1.1.0 → 1.2.0 needs OneConfig 1.8.0, fabric-language-kotlin and the Compose bundle), check
+[Requirements](#requirements); otherwise Fabric stops at launch with a "missing dependency" screen. Taking
+the Huddle jar back out of your mods folder gets you past it.
+
 Updating from 1.0.0 is manual, since 1.0.0 has no updater.
 
 ## Testing
@@ -100,7 +136,7 @@ voice channel to see the overlay.
 
 ## Protocol
 
-Newline-delimited JSON over TCP:
+Newline-delimited JSON over TCP. From Discord to the game:
 
 ```json
 {"type":"hello","version":1}
@@ -109,6 +145,17 @@ Newline-delimited JSON over TCP:
   {"id":"1","name":"Alex","self":false,"muted":true,"deafened":false,
    "serverMuted":false,"serverDeafened":false,"speaking":false,"streaming":false}]}
 {"type":"voice","channel":null,"users":[]}
+{"type":"soundboard","available":true,"reason":null,"sounds":[
+  {"id":"123","guild":null,"name":"quack","group":"Default","favorite":false,"image":"<base64 PNG>"}]}
+{"type":"sound_result","id":"123","ok":false,"error":"Slow down: the soundboard is on cooldown."}
+```
+
+From the game to Discord:
+
+```json
+{"type":"hello","version":1,"mod":"1.2.0"}
+{"type":"soundboard_request"}
+{"type":"play_sound","id":"123","guild":null}
 ```
 
 ## License

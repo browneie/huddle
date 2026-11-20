@@ -26,7 +26,9 @@ public final class LinkServer {
 
     static final Logger LOGGER = LogManager.getLogger("Huddle");
     /** A line longer than this isn't from the plugin; drop the connection rather than buffer it. */
-    private static final int MAX_LINE = 1 << 20;
+    private static final int MAX_LINE = 8 << 20; // a soundboard list carries its emoji pictures
+    /** The connection to talk back on; the latest one wins if several Discord clients connect. */
+    private static volatile OutputStream current;
 
     private LinkServer() {}
 
@@ -52,6 +54,7 @@ public final class LinkServer {
 
     private static void handle(Socket client) {
         LinkState.clientConnected();
+        OutputStream mine = null;
         try (Socket socket = client;
              BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
             // tell the plugin which mod version it's talking to, so it can warn about a mismatch
@@ -60,8 +63,9 @@ public final class LinkServer {
             hello.addProperty("version", 1);
             hello.addProperty("mod", Updater.version());
             OutputStream out = socket.getOutputStream();
-            out.write((hello.toString() + "\n").getBytes(StandardCharsets.UTF_8));
-            out.flush();
+            mine = out;
+            current = out;
+            send(out, hello);
 
             String line;
             while ((line = in.readLine()) != null) {
@@ -77,6 +81,7 @@ public final class LinkServer {
             // Discord closed or restarted; it reconnects on its own
         } finally {
             LinkState.clientDisconnected();
+            if (current == mine) current = null; // unless a newer connection took over
         }
     }
 
@@ -89,12 +94,67 @@ public final class LinkServer {
             case "voice":
                 LinkState.setVoice(parseVoice(msg));
                 break;
+            case "soundboard":
+                LinkState.setSoundboard(parseSoundboard(msg));
+                break;
+            case "sound_result":
+                if (!bool(msg, "ok")) {
+                    String error = str(msg, "error");
+                    Overlay.notifyLater("Soundboard", error.isEmpty() ? "Discord didn't play that sound." : error);
+                }
+                break;
             case "hello":
                 checkPluginVersion(msg);
                 break;
             default:
                 break; // anything newer than us
         }
+    }
+
+    /** Sends a message to Discord. Returns false when it isn't connected. Safe from any thread. */
+    public static boolean send(JsonObject msg) {
+        OutputStream out = current;
+        if (out == null) return false;
+        try {
+            send(out, msg);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static void send(OutputStream out, JsonObject msg) throws IOException {
+        byte[] line = (msg.toString() + "\n").getBytes(StandardCharsets.UTF_8);
+        synchronized (out) {
+            out.write(line);
+            out.flush();
+        }
+    }
+
+    private static LinkState.Soundboard parseSoundboard(JsonObject msg) {
+        List<LinkState.Sound> sounds = new ArrayList<>();
+        JsonElement list = msg.get("sounds");
+        if (list != null && list.isJsonArray()) {
+            for (JsonElement element : list.getAsJsonArray()) {
+                JsonObject s = element.getAsJsonObject();
+                String id = str(s, "id");
+                if (id.isEmpty()) continue;
+                byte[] image = null;
+                String b64 = str(s, "image");
+                if (!b64.isEmpty()) {
+                    try {
+                        image = java.util.Base64.getDecoder().decode(b64);
+                    } catch (IllegalArgumentException ignored) {
+                        // no picture, then
+                    }
+                }
+                String guild = str(s, "guild");
+                sounds.add(new LinkState.Sound(id, guild.isEmpty() ? null : guild, str(s, "name"), str(s, "group"),
+                        bool(s, "favorite"), image));
+            }
+        }
+        String reason = str(msg, "reason");
+        return new LinkState.Soundboard(bool(msg, "available"), reason.isEmpty() ? null : reason, sounds);
     }
 
     private static volatile boolean warnedMismatch;
