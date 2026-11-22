@@ -56,7 +56,7 @@ dependencies {
     modImplementation("org.polyfrost.oneconfig:$mc-ornithe:$oneconfig") {
         exclude(group = "net.fabricmc", module = "fabric-language-kotlin")
     }
-    for (module in listOf("config", "config-impl", "events", "hud", "internal", "ui", "utils", "commands", "notifications")) {
+    for (module in listOf("config", "config-impl", "events", "hud", "internal", "ui", "utils", "notifications")) {
         implementation("org.polyfrost.oneconfig:$module:$oneconfig")
     }
 }

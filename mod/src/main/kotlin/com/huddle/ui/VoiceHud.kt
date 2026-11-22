@@ -23,7 +23,7 @@ import org.polyfrost.oneconfig.api.hud.v1.HudManager
 
 /**
  * The voice overlay as a OneConfig HUD, drawn with the same toolkit as Poly+'s party voice HUD. Move,
- * scale, restyle and hide it in OneConfig's HUD editor.
+ * scale, restyle and hide it in OneConfig's HUD editor; its Show Background and Shadow settings apply here.
  */
 class VoiceHud : Hud("huddle_voice", "Huddle Voice", Category.INFO) {
 
@@ -54,9 +54,9 @@ class VoiceHud : Hud("huddle_voice", "Huddle Voice", Category.INFO) {
         val v = voice ?: return
         PolyColumn(gap = 3f, modifier = hudBackground(PolyModifier.padding(6f))) {
             val header = if (v.guild.isEmpty()) v.channel else "${v.channel} · ${v.guild}"
-            PolyText(header, color = MUTED, fontSize = 9f)
+            Label(header, MUTED, 9f)
             for (m in v.members.take(MAX_ROWS)) Member(m)
-            if (v.members.size > MAX_ROWS) PolyText("+${v.members.size - MAX_ROWS} more", color = MUTED, fontSize = 9f)
+            if (v.members.size > MAX_ROWS) Label("+${v.members.size - MAX_ROWS} more", MUTED, 9f)
         }
     }
 
@@ -73,18 +73,25 @@ class VoiceHud : Hud("huddle_voice", "Huddle Voice", Category.INFO) {
                     rect(x + 1f, top + 1f, 6f, 6f, IDLE, 3f)
                 }
             }
-            PolyText(m.name, color = if (speaking) PolyColor.WHITE else TEXT, fontSize = 11f)
+            Label(m.name, if (speaking) PolyColor.WHITE else TEXT, 11f)
             val muted = m.muted || m.serverMuted
             val deaf = m.deafened || m.serverDeafened
             if (muted || deaf || m.streaming) PolySpacer(width = 4f)
             if (m.streaming) {
                 PolyBox(PolyModifier.background(RED, 3f).padding(horizontal = 3f, vertical = 1f)) {
-                    PolyText("LIVE", color = PolyColor.WHITE, fontSize = 8f)
+                    Label("LIVE", PolyColor.WHITE, 8f)
                 }
             }
             if (muted) Icon(MIC, if (m.serverMuted) RED else ICON)
             if (deaf) Icon(HEADPHONES, if (m.serverDeafened) RED else ICON)
         }
+    }
+
+    /** Text that follows the Shadow setting in OneConfig's HUD editor (Style → Shadow). */
+    @Composable
+    private fun Label(text: String, color: PolyColor, size: Float) {
+        PolyText(text, color = color, fontSize = size, shadow = showShadow, shadowColor = PolyColor(shadowColor),
+            shadowOffset = maxOf(shadowOffsetX, 1f) * size / 12f)
     }
 
     @Composable

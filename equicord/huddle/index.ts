@@ -23,7 +23,7 @@ import { listSounds, playSound } from "./soundboard";
 const Native = VencordNative.pluginHelpers.Huddle as PluginNative<typeof import("./native")>;
 
 /** Keep in step with the mod's version; they warn each other when they don't match. */
-const PLUGIN_VERSION = "1.2.0";
+const PLUGIN_VERSION = "1.2.1";
 const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
 const VoiceStateStore = findStoreLazy("VoiceStateStore");

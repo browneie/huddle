@@ -40,7 +40,7 @@ Your Discord notifications and voice call, inside Minecraft 1.8.9 (Ornithe / One
 - **A voice overlay** that lists everyone in your voice channel by server nickname or display name. Mic
   and headphone icons show who's muted or deafened, in red when the server did it. A green light shows
   who's talking, and a **LIVE** tag shows who's streaming. It's a OneConfig HUD called **Huddle Voice**:
-  move it, scale it and change its background in OneConfig's HUD editor.
+  move it, scale it, and turn its background and text shadow on or off in the HUD editor's Style panel.
 - **A soundboard wheel.** Hold **J** to open a wheel of your
   soundboard sounds: favorites first, then this server's, Discord's defaults, and your other servers'
   if you have Nitro. Point at one and let go to play it in your call, or tap J and click. Scroll for
@@ -63,14 +63,15 @@ them in either order.
 
 | Needs | Version | Where it comes from |
 | --- | --- | --- |
-| Fabric Loader | 0.17 or newer | OneClient, or any Ornithe 1.8.9 instance |
-| OneConfig | 1.8.0 or newer | OneClient (as `OneConfig-1.8.9-ornithe`) |
+| Fabric Loader | 0.19.5 or newer | OneClient, or any Ornithe 1.8.9 instance |
+| OneConfig | 1.9.0 or newer | OneClient (as `OneConfig-1.8.9-ornithe`) |
+| PolyCompose | 3.0.0 or newer | OneClient (as `polycompose-1.8.9-ornithe`), from Polyfrost |
 | fabric-language-kotlin | 1.14.1 or newer | OneClient, or [Modrinth](https://modrinth.com/mod/fabric-language-kotlin) |
-| Compose bundle (`compose-multiplatform`) | any | OneClient (as `compose-bundle`), from Polyfrost |
 | Java | 25 | OneClient's 1.8.9 profile |
 
-A OneClient 1.8.9 profile already has all of these. Huddle 1.0.0 and 1.1.0 only needed OneConfig 1.6.0
-and Fabric Loader; from 1.2.0 on, the list above applies.
+An up-to-date OneClient 1.8.9 profile already has all of these. Huddle 1.2.0 needed OneConfig 1.8 and the
+older Compose bundle (`compose-multiplatform`) instead; OneConfig 1.9 replaced that bundle with PolyCompose,
+so use Huddle 1.2.1 or newer with it. Huddle 1.0.0 and 1.1.0 only needed OneConfig 1.6.0 and Fabric Loader.
 
 **Plugin:** Equicord built from source, on the Discord desktop app (or Equibop).
 
@@ -123,7 +124,7 @@ The jar is written to `mod/build/libs/`.
 The mod only checks at startup, and an update loads on the launch after you install it.
 
 The updater swaps the jar but doesn't install other mods. Before updating across a version that needs
-something new (1.1.0 → 1.2.0 needs OneConfig 1.8.0, fabric-language-kotlin and the Compose bundle), check
+something new (1.2.1 needs OneConfig 1.9 and PolyCompose), check
 [Requirements](#requirements); otherwise Fabric stops at launch with a "missing dependency" screen. Taking
 the Huddle jar back out of your mods folder gets you past it.
 
